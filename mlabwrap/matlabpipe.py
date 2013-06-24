@@ -29,6 +29,7 @@ import scipy.io as mlabio
 import select
 import subprocess
 import sys
+from contextlib import closing
 
 
 class MatlabError(Exception):
@@ -266,26 +267,22 @@ class MatlabPipe(object):
         """
 
         self._check_open()
-        # We can't give stdin to mlabio.savemat because it needs random access :(
-        temp = StringIO()
+        with closing(StringIO()) as temp:
+            # 2011b defaults to -v4 on stdio
+            # Even when we explicitly tell it to use -v7
+            # Universally using format 4 breaks multidimensional arrays in R2013a
+            format = '5'
+            if self.matlab_version == (2011, 'b'):
+                format = '4'
+            mlabio.savemat(temp, name_to_val, oned_as=oned_as, format=format)
 
-        # documentation here:
-        # http://docs.scipy.org/doc/scipy/reference/generated/scipy.io.savemat.html
-        # cpbotha has set format to 4 so that e.g. integers are converted to
-        # doubles. We need to do this, as the save() method we call from matlab
-        # always defaults to v4 when we write to stdio.
-        # scipy 0.12 support v7, but unfortunately we can't use this due to
-        # matlab (at least 2011b) defaulting to v4 on stdio, even when we
-        # explicitly tell it to use -v7.
-        mlabio.savemat(temp, name_to_val, oned_as=oned_as, format='4')
+            temp.seek(0)
+            temp_str = temp.read()
 
-        temp.seek(0)
-        temp_str = temp.read()
-        temp.close()
         self.process.stdin.write('load stdio;\n')
         self._read_until('ack load stdio\n', on_new_output=on_new_output)
         self.process.stdin.write(temp_str)
-        #print 'sent %d kb' % (len(temp_str) / 1024)
+
         self._read_until('ack load finished\n', on_new_output=on_new_output)
         self._sync_output(on_new_output=on_new_output)
 
@@ -299,7 +296,7 @@ class MatlabPipe(object):
         None.
         If it is a variable name, the values is returned.
         If it is a list, a dictionary of variable_name -> value is returned.
-        If it is None, adictionary with all variables is returned.
+        If it is None, a dictionary with all variables is returned.
 
         If extract_numpy_scalars is true, the method will convert numpy scalars
         (0-dimension arrays) to a regular python variable.
@@ -345,23 +342,14 @@ class MatlabPipe(object):
             # that's why we have the extra -3
             temp_str = temp_str[:-len(self.expected_output_end) - 3]
 
-        temp = StringIO(temp_str)
-        #print ('____')
-        #print len(temp_str)
-        #print ('____')
-
-        # cpbotha: with scipy 0.12 this does not always return numpy arrays
-        # behaviour of the function has changed to quite an extent
-        # problem 1: put({'X': 'string'}) and then get({'X': 'string'} actually
-        # returns {'X': 'string'}
-        # I think this might be due to the changed default of struct_as_record
-        # http://docs.scipy.org/doc/scipy/reference/generated/scipy.io.loadmat.html
-        ret = mlabio.loadmat(temp, chars_as_strings=True, squeeze_me=True)
-
-        #print '******'
-        #print ret
-        #print '******'
-        temp.close()
+        with closing(StringIO(temp_str)) as temp:
+            # cpbotha: with scipy 0.12 this does not always return numpy arrays
+            # behaviour of the function has changed to quite an extent
+            # problem 1: put({'X': 'string'}) and then get({'X': 'string'} actually
+            # returns {'X': 'string'}
+            # I think this might be due to the changed default of struct_as_record
+            # http://docs.scipy.org/doc/scipy/reference/generated/scipy.io.loadmat.html
+            ret = mlabio.loadmat(temp, chars_as_strings=True, squeeze_me=True)
 
         for key in ret.iterkeys():
             # address problem 1: only do WTF if the returned value is an ndarray
