@@ -226,8 +226,9 @@ class MatlabPipe(object):
         """ Evaluates a matlab expression synchronously.
 
         If identify_erros is true, and the last output line after evaluating the
-        expressions begins with '???' and excpetion is thrown with the matlab error
-        following the '???'.
+        expressions begins with '???' OR contains the word 'Error' an exception
+        is thrown. This may cause issues if the expected output contains the
+        word 'Error.
         If on_new_output is not None, it will be called whenever a new output is
         encountered. The default value prints the new output to the screen.
         The return value of the function is the matlab output following the call.
@@ -242,10 +243,12 @@ class MatlabPipe(object):
         ret = self._sync_output(on_new_output)
 
         # TODO(dani): Use stderr to identify errors.
-        if identify_errors and ret.rfind('???') != -1:
-            begin = ret.rfind('???') + 4
-            end = ret.find('\n', begin)
-            raise MatlabError(ret[begin:end])
+        # Latest versions of Matlab don't use the '???' for Errors
+        if identify_errors and ('???' in ret or 'Error' in ret):
+            # Remove the last bit of output that is appended, worst case
+            # -1 is returned and we just lose the last character of the error
+            arrow_index = ret.find('>>')
+            raise MatlabError(ret[:arrow_index])
 
         return ret
 
