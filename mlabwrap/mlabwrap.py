@@ -722,6 +722,12 @@ class MlabWrap(object):
             nout = 1
 
         doc = self._do("help('%s')" % name)
+        # Matlab function has no help string, so we've returned an empty
+        # ndarray. We cannot concatenate this later, therefore return a more
+        # useful help string
+        if isinstance(doc, ndarray):
+            doc = "No help text found."
+
         # play it safe only return 1st if nout >= 1
         # XXX are all ``nout>1``s also useable as ``nout==1``s?
         nout = nout and 1
