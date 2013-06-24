@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='mlabwrap-purepy',
-    version='0.1',
+    version='0.1.1',
     description='Slightly improved fork of the pure Python mlabwrap Python to Matlab bridge.',
     long_description=open('README.rst').read(),
     author='Charl P. Botha',

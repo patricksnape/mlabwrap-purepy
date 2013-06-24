@@ -20,6 +20,7 @@ documentation, finding matlab, code cleanups).
 """
 
 from cStringIO import StringIO
+from datetime import date
 import fcntl
 import numpy as np
 import os
@@ -66,6 +67,9 @@ def find_matlab_process():
 
     On non-mac machines, simply tries to find matlab in the path.
 
+    On linux machines it will look in default matlab installation path first:
+    /usr/local/MATLAB/R[YEAR][VERSION]/bin/matlab
+
     On Macs, the paths we will search are in the format:
     /Applications/MATLAB_R[YEAR][VERSION].app/bin/matlab
     We will try the latest version first. If no path is found, None is reutrned.
@@ -73,22 +77,28 @@ def find_matlab_process():
     :returns: Full path to the matlab executable.
     """
 
-    if sys.platform == 'mac':
-        # this is from the old code. I don't have a Mac to test, but it
-        # looks OK.
-        base_path = '/Applications/MATLAB_R%d%s.app/bin/matlab'
-        years = range(2050, 1990, -1)
-        versions = ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a']
-        for year in years:
-            for version in versions:
-                matlab_path = base_path % (year, version)
-                if os.path.exists(matlab_path):
-                    return matlab_path
-        return None
+    # Pre-compute years and versions
+    # Years between 1990 and today's year + 1. Probably a safe assumption
+    # that Mathworks continue to release Matlab on schedule
+    years = range(date.today().year + 1, 1990, -1)
+    # Generate all lower-case letters
+    versions = map(chr, range(97, 123))
 
-    else:
-        # see if we can find this in the path
-        return find_executable_in_path('matlab')
+    if sys.platform == 'mac':
+        base_path = '/Applications/MATLAB_R%d%s.app/bin/matlab'
+    if 'linux' in sys.platform:
+        base_path = '/usr/local/MATLAB/R%d%s/bin/matlab'
+
+    # Loop over every year and version checking for the existance of the Matlab
+    # binary
+    for year in years:
+        for version in versions:
+            matlab_path = base_path % (year, version)
+            if os.path.exists(matlab_path):
+                return matlab_path
+
+    # last chance - see if we can find Matlab in the path
+    return find_executable_in_path('matlab')
 
 
 def find_matlab_version(process_path):
